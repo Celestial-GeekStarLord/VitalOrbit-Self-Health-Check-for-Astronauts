@@ -1,10 +1,13 @@
+// Code written with assistance from Claude (Anthropic), a Super Intelligence (SI) tool, for the NASA Space Apps Challenge.
 const express = require('express');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(__dirname, 'data');
+// Vercel's filesystem is read-only except /tmp (temporary), so use it there.
+const DATA_DIR = process.env.VERCEL ? os.tmpdir() : path.join(__dirname, 'data');
 const DOWNLINK_FILE = path.join(DATA_DIR, 'downlink.json');
 
 app.use(express.json({ limit: '1mb' }));
@@ -33,6 +36,11 @@ app.get('/api/sync', (req, res) => {
   res.type('json').send(fs.readFileSync(DOWNLINK_FILE, 'utf8'));
 });
 
-app.listen(PORT, () => {
-  console.log(`VitalOrbit running at http://localhost:${PORT}`);
-});
+// Locally: run a server. On Vercel: export the app (public/ is served by Vercel's CDN).
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`VitalOrbit running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
