@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VitalOrbit · Trends</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<header id="top"></header>
+<main>
+  <h1>Trends over time</h1>
+  <p class="lead">Slow drifts matter in space. Watch which direction each indicator is heading, not just today's value.</p>
+
+  <div class="controls">
+    <label>Indicator <select id="ind"></select></label>
+    <label>Period <select id="range">
+      <option value="7">Last 7 days</option>
+      <option value="14" selected>Last 14 days</option>
+      <option value="30">Last 30 days</option>
+      <option value="90">Last 90 days</option>
+    </select></label>
+    <button class="ghost" id="csv" type="button">Export CSV</button>
+    <button class="primary" id="sync" type="button">Send to flight surgeon</button>
+  </div>
+  <div class="legend">
+    <span><i style="background:#3fcf8e"></i>In range</span>
+    <span><i style="background:#f2b84b"></i>Watch</span>
+    <span><i style="background:#ff6b6b"></i>Act now</span>
+  </div>
+  <canvas id="chart" role="img" aria-label="Line chart of the selected health indicator"></canvas>
+  <div id="note" class="lead" style="margin-top:10px"></div>
+  <div id="msg" role="status"></div>
+
+  <h2 style="margin-top:28px">Recent check-ins</h2>
+  <div class="table-wrap"><table id="table"></table></div>
+</main>
+
+<script src="/js/common.js"></script>
+<script>
+  VO.nav('trends');
+  const $ = id => document.getElementById(id);
+  const cv = $('chart');
+  $('ind').innerHTML = Object.keys(VO.IND).map(k => '<option value="' + k + '">' + VO.IND[k].label + '</option>').join('');
+
+  function colorFor(level) { return ['#3fcf8e', '#f2b84b', '#ff6b6b'][level] || '#6f7f9e'; }
+
+  function draw() {
+    const k = $('ind').value, days = +$('range').value, d = VO.IND[k];
+    const cutoff = Date.now() - days * 864e5;
+    const pts = VO.entries().filter(e => e.values[k] != null && new Date(e.t).getTime() >= cutoff)
+      .map(e => ({ t: new Date(e.t).getTime(), v: +e.values[k] }));
+    const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    g.font = '13px system-ui, sans-serif';
+
+    if (!pts.length) {
+      g.fillStyle = '#a3b3cf'; g.textAlign = 'center';
+      g.fillText('No readings in this period. Log a check-in or load demo data.', W / 2, H / 2);
+      $('note').textContent = ''; return;
+    }
+    const vals = pts.map(p => p.v);
+    let lo = Math.min(...vals, d.caution[0]), hi = Math.max(...vals, d.normal[1]);
+    const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+    const m = { l: 50, r: 16, t: 14, b: 30 };
+    const pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const y = v => m.t + ph - (v - lo) / (hi - lo) * ph;
+    const tmin = Math.min(...pts.map(p => p.t)), tmax = Math.max(...pts.map(p => p.t));
+    const x = t => tmax === tmin ? m.l + pw / 2 : m.l + (t - tmin) / (tmax - tmin) * pw;
+
+    const band = (a, b, col) => {
+      const top = y(Math.min(b, hi)), bot = y(Math.max(a, lo));
+      if (bot > top) { g.fillStyle = col; g.fillRect(m.l, top, pw, bot - top); }
+    };
+    band(lo, hi, 'rgba(255,107,107,.18)');
+    band(d.caution[0], d.caution[1], 'rgba(242,184,75,.2)');
+    band(d.normal[0], d.normal[1], 'rgba(63,207,142,.25)');
+
+    g.fillStyle = '#a3b3cf'; g.strokeStyle = 'rgba(255,255,255,.08)'; g.textAlign = 'right';
+    for (let i = 0; i <= 4; i++) {
+      const v = lo + (hi - lo) * i / 4, yy = y(v);
+      g.beginPath(); g.moveTo(m.l, yy); g.lineTo(W - m.r, yy); g.stroke();
+      g.fillText(v.toFixed(d.step < 1 ? 1 : 0), m.l - 6, yy + 4);
+    }
+    g.textAlign = 'left'; g.fillText(new Date(tmin).toLocaleDateString(), m.l, H - 8);
+    g.textAlign = 'right'; g.fillText(new Date(tmax).toLocaleDateString(), W - m.r, H - 8);
+
+    g.strokeStyle = '#9cc0ff'; g.lineWidth = 2; g.beginPath();
+    pts.forEach((p, i) => { i ? g.lineTo(x(p.t), y(p.v)) : g.moveTo(x(p.t), y(p.v)); });
+    g.stroke();
+    pts.forEach(p => {
+      g.fillStyle = colorFor(VO.status(k, p.v).level);
+      g.strokeStyle = '#0d1626'; g.lineWidth = 2;
+      g.beginPath(); g.arc(x(p.t), y(p.v), 5, 0, 7); g.fill(); g.stroke();
+    });
+
+    // simple trend message
+    if (pts.length >= 3) {
+      const first = pts.slice(0, Math.ceil(pts.length / 2)), last = pts.slice(-Math.ceil(pts.length / 2));
+      const avg = a => a.reduce((s, p) => s + p.v, 0) / a.length;
+      const diff = avg(last) - avg(first), span = d.normal[1] - d.normal[0];
+      const dir = Math.abs(diff) < span * 0.05 ? 'steady' : diff > 0 ? 'rising' : 'falling';
+      $('note').textContent = 'Trend: ' + dir + ' (average ' + avg(first).toFixed(1) + ' to ' + avg(last).toFixed(1) + ' ' + d.unit + ').';
+    } else $('note').textContent = 'Log a few more check-ins to see a trend.';
+  }
+
+  function table() {
+    const rows = VO.entries().slice(-10).reverse(), keys = Object.keys(VO.IND);
+    if (!rows.length) { $('table').innerHTML = '<tr><td class="muted">No check-ins yet.</td></tr>'; return; }
+    $('table').innerHTML = '<tr><th>Date</th>' + keys.map(k => '<th>' + VO.IND[k].label.split(' (')[0].replace('Blood pressure, ', 'BP ') + '</th>').join('') + '</tr>' +
+      rows.map(e => '<tr><td>' + e.date + '</td>' + keys.map(k => {
+        const v = e.values[k];
+        return '<td class="s' + (v == null ? -1 : VO.status(k, v).level) + '">' + (v == null ? '–' : v) + '</td>';
+      }).join('') + '</tr>').join('');
+  }
+
+  $('ind').onchange = draw; $('range').onchange = draw;
+  window.addEventListener('resize', draw);
+
+  $('csv').onclick = () => {
+    const keys = Object.keys(VO.IND);
+    const lines = ['date,' + keys.join(',')].concat(VO.entries().map(e => e.date + ',' + keys.map(k => e.values[k] ?? '').join(',')));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
+    a.download = 'vitalorbit-log.csv'; a.click();
+  };
+
+  $('sync').onclick = async () => {
+    try {
+      const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ env: VO.getEnv().id, entries: VO.entries() }) });
+      const j = await r.json();
+      $('msg').innerHTML = j.ok ? '<p class="alert watch">Sent ' + j.count + ' check-ins to the ground team.</p>' : '<p class="alert">Could not send: ' + j.error + '</p>';
+    } catch (e) {
+      $('msg').innerHTML = '<p class="alert">Link unavailable. Your data is safe on this device. Try again later or export a CSV.</p>';
+    }
+  };
+
+  draw(); table();
+</script>
+</body>
+</html>

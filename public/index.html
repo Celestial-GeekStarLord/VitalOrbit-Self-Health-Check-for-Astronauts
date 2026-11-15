@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VitalOrbit · Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<header id="top"></header>
+<main>
+  <h1>Your health at a glance</h1>
+  <p class="lead">Select a part of the body to see how it works, what spaceflight does to it, and what your latest readings say.</p>
+
+  <div id="summary" class="card summary"></div>
+  <div id="alert"></div>
+
+  <div class="grid two">
+    <section class="card body-wrap" aria-label="Body map">
+      <svg class="body" viewBox="0 0 240 440" role="group" aria-label="Clickable human body">
+        <circle class="shape" cx="120" cy="48" r="32"/>
+        <rect class="shape" x="108" y="78" width="24" height="22" rx="6"/>
+        <rect class="shape" x="74" y="96" width="92" height="150" rx="34"/>
+        <rect class="shape" x="42" y="104" width="26" height="140" rx="13"/>
+        <rect class="shape" x="172" y="104" width="26" height="140" rx="13"/>
+        <rect class="shape" x="80" y="244" width="36" height="176" rx="18"/>
+        <rect class="shape" x="124" y="244" width="36" height="176" rx="18"/>
+
+        <g data-organ="brain" tabindex="0" role="button" aria-label="Brain and mind">
+          <title>Brain and mind</title><ellipse class="spot" cx="120" cy="44" rx="19" ry="15"/>
+        </g>
+        <g data-organ="heart" tabindex="0" role="button" aria-label="Heart and blood vessels">
+          <title>Heart and blood vessels</title><circle class="spot" cx="134" cy="136" r="16"/>
+        </g>
+        <g data-organ="gut" tabindex="0" role="button" aria-label="Metabolism">
+          <title>Metabolism (blood sugar)</title><ellipse class="spot" cx="120" cy="196" rx="26" ry="19"/>
+        </g>
+        <g data-organ="skin" tabindex="0" role="button" aria-label="Temperature and immune system">
+          <title>Temperature and immune system</title><circle class="spot" cx="55" cy="160" r="12"/>
+        </g>
+        <g data-organ="bones" tabindex="0" role="button" aria-label="Bones and muscles">
+          <title>Bones and muscles</title>
+          <ellipse class="spot" cx="98" cy="332" rx="13" ry="46"/>
+          <ellipse class="spot" cx="142" cy="332" rx="13" ry="46"/>
+        </g>
+      </svg>
+      <div class="organ-btns" id="organBtns"></div>
+    </section>
+
+    <section>
+      <div class="card" id="detail"></div>
+      <div class="card" id="priority" style="margin-top:18px"></div>
+    </section>
+  </div>
+  <div class="env-note" id="envNote"></div>
+  <p class="disclaimer">Reference ranges are general adult guidance for demonstration. They are not a diagnosis. Follow your flight surgeon's instructions.</p>
+</main>
+
+<script src="/js/common.js"></script>
+<script>
+  VO.nav('index');
+  let selected = 'heart';
+  const $ = id => document.getElementById(id);
+
+  function renderSummary() {
+    const sc = VO.score(), lv = VO.scoreLevel(sc), st = VO.stats();
+    $('summary').innerHTML =
+      '<div class="ring s' + lv + '" style="--pct:' + (sc || 0) + '"><div><span><b>' + (sc === null ? '–' : sc) + '</b><small>health score</small></span></div></div>' +
+      '<div><h2>' + (sc === null ? 'No readings yet' : lv === 0 ? 'You are doing well' : lv === 1 ? 'A few things to watch' : 'Some readings need action') + '</h2>' +
+      '<p class="muted">' + (sc === null ? 'Log your first check-in to see your status. Or load demo data from the Check-in page.' : 'Based on your most recent value for each indicator.') + '</p>' +
+      '<div class="pills"><span class="pill">Level ' + st.level + '</span><span class="pill">' + VO.streak() + '-day streak</span><span class="pill">' + st.xp + ' XP</span></div></div>';
+  }
+
+  function renderAlert() {
+    const a = VO.advice(), red = a.filter(x => x.level === 2), amber = a.filter(x => x.level === 1);
+    if (red.length) {
+      $('alert').innerHTML = '<div class="alert" role="alert"><strong>Contact the flight surgeon</strong>' +
+        red.map(x => VO.IND[x.k].label + ' is ' + VO.fmt(x.k, x.v)).join('; ') + '. Follow the steps below while you wait for a reply.</div>';
+    } else if (amber.length >= 3) {
+      $('alert').innerHTML = '<div class="alert watch"><strong>Several readings to watch</strong>Re-measure after rest and share the trend with the flight surgeon at your next conference.</div>';
+    } else $('alert').innerHTML = '';
+  }
+
+  function renderBody() {
+    document.querySelectorAll('[data-organ]').forEach(g => {
+      const id = g.dataset.organ, lv = VO.organLevel(id);
+      const spots = g.querySelectorAll('.spot');
+      spots.forEach(s => { s.setAttribute('class', 'spot s' + lv + (id === selected ? ' sel' : '')); });
+      g.onclick = () => select(id);
+      g.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(id); } };
+    });
+    $('organBtns').innerHTML = Object.keys(VO.ORGANS).map(id =>
+      '<button class="s' + VO.organLevel(id) + (id === selected ? ' sel' : '') + '" data-id="' + id + '">' + VO.ORGANS[id].name.split(' and ')[0] + '</button>').join('');
+    $('organBtns').querySelectorAll('button').forEach(b => b.onclick = () => select(b.dataset.id));
+  }
+
+  function renderDetail() {
+    const o = VO.ORGANS[selected], L = VO.latest();
+    let html = '<h2>' + o.name + '</h2><p><strong>What it does:</strong> ' + o.fn + '</p><p><strong>Spaceflight effect:</strong> ' + o.hazard + '</p><p class="muted">Source: <a href="' + o.src[1] + '" target="_blank" rel="noopener">NASA Human Research Program, ' + o.src[0] + '</a></p>';
+    o.inds.forEach(k => {
+      const d = VO.IND[k], s = L[k] ? VO.status(k, L[k].v) : { level: -1 };
+      html += '<div class="ind-row"><span>' + d.label + '</span><b>' + (L[k] ? VO.fmt(k, L[k].v) : '–') + '</b>' + VO.chip(s.level) + '</div>';
+      if (s.level > 0 && d[s.dir]) html += '<div class="advice s' + s.level + '">' + d[s.dir] + '</div>';
+    });
+    if (!o.inds.some(k => L[k])) html += '<p class="muted">No readings for this area yet. <a href="/checkin.html">Log a check-in</a>.</p>';
+    $('detail').innerHTML = html;
+  }
+
+  function renderPriority() {
+    const a = VO.advice();
+    $('priority').innerHTML = '<h2>What to do next</h2>' + (a.length ? a.map(x =>
+      '<div class="advice s' + x.level + '"><strong>' + VO.IND[x.k].label + ' ' + VO.chip(x.level) + '</strong> ' + x.text + '</div>').join('')
+      : '<p class="muted">Nothing urgent. Keep up your daily exercise, sleep schedule and check-ins. See <a href="/missions.html">today\u2019s missions</a>.</p>');
+  }
+
+  function select(id) { selected = id; renderBody(); renderDetail(); }
+  const env = VO.getEnv();
+  $('envNote').innerHTML = '<strong>' + env.name + ' · ' + env.g + '.</strong> ' + env.note;
+  renderSummary(); renderAlert(); renderBody(); renderDetail(); renderPriority();
+</script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VitalOrbit · Check-in</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<header id="top"></header>
+<main>
+  <h1>Daily check-in</h1>
+  <p class="lead">Enter what you measured today. Skip anything you did not measure. Open "How to measure and why" under any field for a quick guide.</p>
+
+  <form id="form" novalidate></form>
+  <div class="actions">
+    <button class="primary" id="save" type="button">Save check-in</button>
+    <button class="ghost" id="demo" type="button">Load 14 days of demo data</button>
+    <button class="ghost" id="clear" type="button">Clear all data</button>
+  </div>
+  <div id="msg" role="status"></div>
+  <div id="result" class="card result" hidden></div>
+  <p class="disclaimer">Data stays on this device. Reference ranges are general adult guidance for demonstration, not a diagnosis.</p>
+</main>
+
+<script src="/js/common.js"></script>
+<script>
+  VO.nav('checkin');
+  const $ = id => document.getElementById(id);
+  const form = $('form');
+
+  Object.keys(VO.IND).forEach(k => {
+    const d = VO.IND[k];
+    const row = document.createElement('div');
+    row.className = 'field';
+    const control = d.options
+      ? '<select id="f_' + k + '"><option value="">Skip</option>' + d.options.map((o, i) => '<option value="' + (i + 1) + '">' + o + '</option>').join('') + '</select>'
+      : '<div class="inwrap"><input id="f_' + k + '" type="number" inputmode="decimal" step="' + d.step + '" min="' + d.min + '" max="' + d.max + '" placeholder="e.g. ' + d.ph + '"><span class="unit">' + d.unit + '</span></div>';
+    row.innerHTML =
+      '<div class="fhead"><label for="f_' + k + '">' + d.label + '</label><span id="c_' + k + '"></span></div>' + control +
+      '<details><summary>How to measure and why</summary><p><strong>How:</strong> ' + d.how + '</p><p><strong>Why it matters:</strong> ' + d.why + '</p></details>';
+    form.appendChild(row);
+    const el = row.querySelector('#f_' + k);
+    const update = () => {
+      const v = el.value === '' ? null : +el.value;
+      $('c_' + k).innerHTML = v === null ? '' : VO.chip(VO.status(k, v).level);
+    };
+    el.addEventListener('input', update);
+    el.addEventListener('change', update);
+  });
+
+  $('save').onclick = () => {
+    const values = {};
+    for (const k in VO.IND) {
+      const el = $('f_' + k);
+      if (el.value !== '' && !isNaN(el.value)) values[k] = +el.value;
+    }
+    $('result').hidden = true;
+    if (!Object.keys(values).length) {
+      $('msg').innerHTML = '<p class="alert watch">Enter at least one measurement, then save again.</p>';
+      return;
+    }
+    VO.addEntry(values);
+    $('msg').innerHTML = '';
+    let html = '<h2>Check-in saved</h2><p class="muted">+10 XP. Streak: ' + VO.streak() + ' day(s).</p>';
+    let worst = 0;
+    Object.keys(values).forEach(k => {
+      const s = VO.status(k, values[k]);
+      worst = Math.max(worst, s.level);
+      html += '<div class="ind-row"><span>' + VO.IND[k].label + '</span><b>' + VO.fmt(k, values[k]) + '</b>' + VO.chip(s.level) + '</div>';
+      if (s.level > 0 && VO.IND[k][s.dir]) html += '<div class="advice s' + s.level + '">' + VO.IND[k][s.dir] + '</div>';
+    });
+    if (worst === 2) html += '<p class="alert" role="alert"><strong>Contact the flight surgeon</strong>At least one reading is outside the safe range.</p>';
+    html += '<p><a href="/">Back to the dashboard</a></p>';
+    $('result').innerHTML = html;
+    $('result').hidden = false;
+    form.querySelectorAll('input, select').forEach(e => { e.value = ''; });
+    form.querySelectorAll('[id^="c_"]').forEach(e => { e.innerHTML = ''; });
+  };
+
+  $('demo').onclick = () => {
+    if (VO.entries().length && !confirm('This replaces your saved readings with demo data. Continue?')) return;
+    VO.demo();
+    $('msg').innerHTML = '<p class="alert watch">Demo data loaded. Open the <a href="/">dashboard</a> or <a href="/trends.html">trends</a>.</p>';
+  };
+  $('clear').onclick = () => {
+    if (!confirm('Delete all saved readings and missions on this device?')) return;
+    VO.clearAll();
+    $('msg').innerHTML = '<p class="alert watch">All data cleared.</p>';
+    $('result').hidden = true;
+  };
+</script>
+</body>
+</html>

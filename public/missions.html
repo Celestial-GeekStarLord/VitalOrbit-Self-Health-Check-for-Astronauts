@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VitalOrbit · Missions</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<header id="top"></header>
+<main>
+  <h1>Daily health missions</h1>
+  <p class="lead">Small daily habits that protect you from the five spaceflight hazards. Earn XP, build a streak and collect badges.</p>
+
+  <div class="card" id="level"></div>
+  <div class="card" style="margin-top:18px">
+    <h2>Today's missions</h2>
+    <div id="list"></div>
+  </div>
+  <h2 style="margin-top:28px">Badges</h2>
+  <div class="badges" id="badges"></div>
+</main>
+
+<script src="/js/common.js"></script>
+<script>
+  VO.nav('missions');
+  const $ = id => document.getElementById(id);
+
+  function render() {
+    const st = VO.stats(), done = VO.doneToday();
+    $('level').innerHTML = '<h2>Level ' + st.level + '</h2>' +
+      '<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="' + st.per + '" aria-valuenow="' + st.into + '"><span style="width:' + (st.into / st.per * 100) + '%"></span></div>' +
+      '<p class="muted" style="margin-top:8px">' + st.into + ' / ' + st.per + ' XP to level ' + (st.level + 1) + ' · ' + VO.streak() + '-day check-in streak</p>';
+
+    $('list').innerHTML = VO.MISSIONS.map(m =>
+      '<label class="mission"><input type="checkbox" data-id="' + m.id + '"' + (done.includes(m.id) ? ' checked' : '') + (m.auto ? ' disabled' : '') + '>' +
+      '<span>' + m.text + '<small>' + m.tag + (m.auto ? '' : ' · +5 XP') + '</small></span></label>').join('') +
+      '<p class="muted" style="margin-top:10px">' + done.length + ' of ' + VO.MISSIONS.length + ' complete today.</p>';
+    $('list').querySelectorAll('input:not([disabled])').forEach(i => i.onchange = () => { VO.toggleMission(i.dataset.id); render(); });
+
+    $('badges').innerHTML = VO.badges().map(b =>
+      '<div class="badge' + (b.got ? ' got' : '') + '"><strong>' + b.name + '</strong><small>' + b.desc + '</small><small>' + (b.got ? 'Earned' : 'Locked') + '</small></div>').join('');
+  }
+  render();
+</script>
+</body>
+</html>
