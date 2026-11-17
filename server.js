@@ -36,6 +36,42 @@ app.get('/api/sync', (req, res) => {
   res.type('json').send(fs.readFileSync(DOWNLINK_FILE, 'utf8'));
 });
 
+// Live space weather from NASA DONKI (api.nasa.gov). Cached for 30 minutes to respect rate limits.
+// Set NASA_API_KEY (free at https://api.nasa.gov) for higher limits; DEMO_KEY allows about 30 requests/hour.
+const NASA_KEY = process.env.NASA_API_KEY || 'DEMO_KEY';
+let swCache = { t: 0, data: null };
+
+async function donki(type, start, end) {
+  const url = `https://api.nasa.gov/DONKI/${type}?startDate=${start}&endDate=${end}&api_key=${NASA_KEY}`;
+  const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error(`${type} ${r.status}`);
+  const text = await r.text();
+  if (!text.trim()) return [];
+  try { const j = JSON.parse(text); return Array.isArray(j) ? j : []; } catch (e) { return []; }
+}
+
+app.get('/api/spaceweather', async (req, res) => {
+  if (swCache.data && Date.now() - swCache.t < 30 * 60 * 1000) return res.json(swCache.data);
+  try {
+    const iso = d => d.toISOString().slice(0, 10);
+    const end = new Date(), start = new Date(Date.now() - 7 * 864e5);
+    const [flr, sep, cme, gst] = await Promise.all(['FLR', 'SEP', 'CME', 'GST'].map(t => donki(t, iso(start), iso(end))));
+    const data = {
+      ok: true, fetchedAt: new Date().toISOString(), source: 'NASA DONKI (api.nasa.gov)',
+      flares: flr.map(f => ({ class: f.classType, peak: f.peakTime || f.beginTime, region: f.sourceLocation || null })),
+      sep: sep.map(x => ({ time: x.eventTime })),
+      cme: cme.map(c => ({ time: c.startTime, region: c.sourceLocation || null })),
+      storms: gst.map(g => ({ time: g.startTime, kp: Math.max(0, ...((g.allKpIndex || []).map(k => k.kpIndex || 0))) }))
+    };
+    swCache = { t: Date.now(), data };
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    if (swCache.data) return res.json({ ...swCache.data, stale: true });
+    res.status(502).json({ ok: false, error: 'NASA space-weather service unavailable' });
+  }
+});
+
 // Locally: run a server. On Vercel: export the app (public/ is served by Vercel's CDN).
 if (require.main === module) {
   app.listen(PORT, () => {

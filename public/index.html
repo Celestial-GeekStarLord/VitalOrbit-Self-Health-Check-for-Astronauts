@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="ai-generated" content="code: Claude (Anthropic), SI-assisted">
+  <meta name="generator" content="VitalOrbit, built with SI assistance (Claude, Anthropic)">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VitalOrbit · Dashboard</title>
   <link rel="stylesheet" href="/css/style.css">
@@ -113,10 +115,23 @@
       : '<p class="muted">Nothing urgent. Keep up your daily exercise, sleep schedule and check-ins. See <a href="/missions.html">today\u2019s missions</a>.</p>');
   }
 
+  function renderExtra() {
+    let html = '';
+    const dr = VO.drift().filter(x => x.inRange);
+    if (dr.length) html += '<h2 style="margin-top:18px">Early warning: drifting from your baseline</h2>' + dr.map(x =>
+      '<div class="advice s1"><strong>' + VO.IND[x.k].label + '</strong> is ' + VO.fmt(x.k, x.v) + ', about ' + Math.abs(x.z).toFixed(1) + ' SD ' + x.dir + ' your baseline of ' + x.mean.toFixed(1) + '. <small>Still in the normal range, but unusual for you. Re-measure tomorrow and note changes in sleep, stress or workload.</small></div>').join('');
+    const ds = VO.doseStats();
+    if (ds.log.length || ds.prior) {
+      const lv = ds.pct >= 90 ? 2 : ds.pct >= 75 ? 1 : 0;
+      html += '<h2 style="margin-top:18px">Radiation</h2><div class="advice s' + lv + '">Career dose <strong>' + ds.total.toFixed(1) + ' mSv</strong>, ' + ds.pct.toFixed(0) + '% of NASA\u2019s ' + VO.DOSE_LIMIT + ' mSv limit. <a href="/radiation.html">Open radiation and space weather</a></div>';
+    }
+    $('priority').insertAdjacentHTML('beforeend', html);
+  }
+
   function select(id) { selected = id; renderBody(); renderDetail(); }
   const env = VO.getEnv();
   $('envNote').innerHTML = '<strong>' + env.name + ' · ' + env.g + '.</strong> ' + env.note;
-  renderSummary(); renderAlert(); renderBody(); renderDetail(); renderPriority();
+  renderSummary(); renderAlert(); renderBody(); renderDetail(); renderPriority(); renderExtra();
 </script>
 </body>
 </html>

@@ -1,3 +1,4 @@
+/* Code written with assistance from Claude (Anthropic), a Super Intelligence (SI) tool, for the NASA Space Apps Challenge. */
 :root {
   --bg: #0d1626;
   --panel: #15213a;
@@ -136,3 +137,12 @@ td.s-1 { color: var(--muted); }
 .hazards dd { margin: 0; color: var(--muted); }
 ul.plain { padding-left: 1.2em; } ul.plain li { margin: .35em 0; }
 .disclaimer { font-size: .88rem; color: var(--muted); border-top: 1px solid var(--line); margin-top: 32px; padding-top: 14px; }
+
+/* v2: radiation page, report */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 14px 0; }
+.tiles div { background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.tiles b { display: block; font: 600 1.7rem var(--serif); font-variant-numeric: tabular-nums; }
+.tiles small { color: var(--muted); }
+.dosebars { display: flex; align-items: flex-end; gap: 6px; height: 110px; border-bottom: 1px solid var(--line); }
+.dosebars div { flex: 1; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; }
+.report { white-space: pre-wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; font: .85rem/1.5 ui-monospace, Consolas, monospace; overflow-x: auto; }

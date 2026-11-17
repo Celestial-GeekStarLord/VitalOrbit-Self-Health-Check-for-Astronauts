@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="ai-generated" content="code: Claude (Anthropic), SI-assisted">
+  <meta name="generator" content="VitalOrbit, built with SI assistance (Claude, Anthropic)">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VitalOrbit · Trends</title>
   <link rel="stylesheet" href="/css/style.css">
@@ -27,6 +29,7 @@
     <span><i style="background:#3fcf8e"></i>In range</span>
     <span><i style="background:#f2b84b"></i>Watch</span>
     <span><i style="background:#ff6b6b"></i>Act now</span>
+    <span><i style="background:transparent;border:2px dashed #9cc0ff"></i>Your baseline and 2 SD</span>
   </div>
   <canvas id="chart" role="img" aria-label="Line chart of the selected health indicator"></canvas>
   <div id="note" class="lead" style="margin-top:10px"></div>
@@ -34,6 +37,15 @@
 
   <h2 style="margin-top:28px">Recent check-ins</h2>
   <div class="table-wrap"><table id="table"></table></div>
+
+  <h2 style="margin-top:28px">Flight surgeon report</h2>
+  <p class="lead">A ready-to-send summary in SBAR format (situation, background, assessment, recommendation). With a communication delay, send it now and keep following the safe steps while you wait.</p>
+  <div class="actions">
+    <button class="primary" id="gen" type="button">Generate report</button>
+    <button class="ghost" id="copy" type="button">Copy</button>
+    <button class="ghost" id="print" type="button">Print</button>
+  </div>
+  <pre id="rep" class="report" hidden></pre>
 </main>
 
 <script src="/js/common.js"></script>
@@ -77,6 +89,12 @@
     band(lo, hi, 'rgba(255,107,107,.18)');
     band(d.caution[0], d.caution[1], 'rgba(242,184,75,.2)');
     band(d.normal[0], d.normal[1], 'rgba(63,207,142,.25)');
+    const bl = VO.baseline(k);
+    if (bl) {
+      g.setLineDash([6, 5]); g.strokeStyle = 'rgba(156,192,255,.85)'; g.lineWidth = 1.5;
+      [bl.mean, bl.mean + 2 * bl.sd, bl.mean - 2 * bl.sd].forEach(v => { if (v > lo && v < hi) { g.beginPath(); g.moveTo(m.l, y(v)); g.lineTo(W - m.r, y(v)); g.stroke(); } });
+      g.setLineDash([]);
+    }
 
     g.fillStyle = '#a3b3cf'; g.strokeStyle = 'rgba(255,255,255,.08)'; g.textAlign = 'right';
     for (let i = 0; i <= 4; i++) {
@@ -136,6 +154,19 @@
     } catch (e) {
       $('msg').innerHTML = '<p class="alert">Link unavailable. Your data is safe on this device. Try again later or export a CSV.</p>';
     }
+  };
+
+  $('gen').onclick = () => { $('rep').textContent = VO.report(); $('rep').hidden = false; };
+  $('copy').onclick = async () => {
+    if ($('rep').hidden) $('gen').click();
+    try { await navigator.clipboard.writeText($('rep').textContent); $('msg').innerHTML = '<p class="alert watch">Report copied.</p>'; }
+    catch (e) { $('msg').innerHTML = '<p class="alert watch">Select the report text and copy it manually.</p>'; }
+  };
+  $('print').onclick = () => {
+    if ($('rep').hidden) $('gen').click();
+    const w = window.open('', '_blank'); if (!w) return;
+    w.document.write('<pre style="font:14px/1.5 monospace;white-space:pre-wrap">' + $('rep').textContent.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</pre>');
+    w.document.close(); w.print();
   };
 
   draw(); table();

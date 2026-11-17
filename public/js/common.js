@@ -1,3 +1,4 @@
+// Code written with assistance from Claude (Anthropic), a Super Intelligence (SI) tool, for the NASA Space Apps Challenge.
 (function () {
   'use strict';
 
@@ -105,13 +106,13 @@
   };
 
   const ENV = [
-    { id: 'iss', name: 'Space station (low Earth orbit)', g: 'Microgravity',
+    { id: 'iss', delay: 'near real time, with gaps in coverage', name: 'Space station (low Earth orbit)', g: 'Microgravity',
       note: 'NASA uses the station to study how the body responds in space. Neutron radiation makes up about 30% of total radiation on the ISS (CSA), so keep your dosimeter checks up to date.' },
-    { id: 'transit', name: 'Deep-space spacecraft', g: 'Microgravity',
+    { id: 'transit', delay: 'many minutes one-way, depending on distance', name: 'Deep-space spacecraft', g: 'Microgravity',
       note: 'Beyond Earth’s magnetic field, galactic cosmic rays and solar storms are a serious risk (NASA). Help and supplies are far away, so self-care matters most.' },
-    { id: 'moon', name: 'Moon base', g: '0.16 g',
+    { id: 'moon', delay: 'about 1.3 seconds one-way', name: 'Moon base', g: '0.16 g',
       note: 'Muscles, bones and the inner ear must adjust to a new gravity level (NASA), so keep exercising. Plan for radiation protection and for slower help from Earth.' },
-    { id: 'mars', name: 'Mars base', g: '0.38 g',
+    { id: 'mars', delay: 'about 3 to 22 minutes one-way', name: 'Mars base', g: '0.38 g',
       note: 'Astronauts would live in three-eighths of Earth’s gravity for up to two years. Mars is about 140 million miles away on average and a mission could last roughly three years, so self-sufficiency is key (NASA).' }
   ];
 
@@ -119,7 +120,7 @@
     { id: 'checkin', text: 'Log today\u2019s vitals', tag: 'Auto-completes when you check in', auto: true },
     { id: 'exercise', text: 'Finish your exercise session', tag: 'Gravity fields: protects bones and muscles' },
     { id: 'fluids', text: 'Drink your fluid target', tag: 'Hostile closed environment: fluids and cabin air' },
-    { id: 'dosimeter', text: 'Check your radiation dosimeter', tag: 'Space radiation' },
+    { id: 'dosimeter', text: 'Check your radiation dosimeter', tag: 'Space radiation · log it on the Radiation page' },
     { id: 'social', text: 'Have a social call with crew or family', tag: 'Isolation and confinement' },
     { id: 'lights', text: 'Lights out on your sleep schedule', tag: 'Sleep and circadian rhythm' }
   ];
@@ -252,15 +253,17 @@
       });
     }
     LS.set('vo_entries', list);
+    // demo dosimeter log: about 0.3 to 0.7 mSv/day, consistent with the 50 to 120 mSv per six months NASA/National Academies cite for the ISS
+    LS.set('vo_dose', { prior: 120, log: list.map((e, i) => ({ date: e.date, mSv: +(0.45 + Math.sin(i * 1.7) * 0.12 + (i % 3) * 0.03).toFixed(2) })) });
   }
   function clearAll() {
-    ['vo_entries', 'vo_missions'].forEach(k => { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } });
+    ['vo_entries', 'vo_missions', 'vo_dose', 'vo_sw'].forEach(k => { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } });
   }
 
   /* ---------- shared header ---------- */
   function nav(active) {
     const pages = [['index', 'Dashboard', '/'], ['checkin', 'Check-in', '/checkin.html'],
-      ['trends', 'Trends', '/trends.html'], ['missions', 'Missions', '/missions.html'], ['guide', 'Guide', '/guide.html']];
+      ['trends', 'Trends', '/trends.html'], ['radiation', 'Radiation', '/radiation.html'], ['missions', 'Missions', '/missions.html'], ['guide', 'Guide', '/guide.html']];
     const env = getEnv();
     document.getElementById('top').innerHTML =
       '<a class="brand" href="/">VitalOrbit</a>' +
@@ -271,6 +274,114 @@
     document.getElementById('envSel').onchange = function () { LS.set('vo_env', this.value); location.reload(); };
   }
 
+  /* ---------- personal baseline (early warning) ----------
+     Flight surgeons care about change from YOUR normal, not only population ranges.
+     Baseline = first 7 readings of each indicator. A later value is flagged when it is 2+ SD
+     from baseline AND moving away from the centre of the normal range. */
+  const BASE_N = 7;
+  function series(k) {
+    return entries().filter(e => e.values[k] != null).map(e => ({ t: e.t, v: +e.values[k] }));
+  }
+  function baseline(k) {
+    const sr = series(k);
+    if (sr.length < BASE_N + 1) return null;
+    const b = sr.slice(0, BASE_N).map(p => p.v);
+    const mean = b.reduce((a, x) => a + x, 0) / b.length;
+    const sd = Math.sqrt(b.reduce((a, x) => a + (x - mean) * (x - mean), 0) / b.length);
+    const d = IND[k];
+    return { mean, sd: Math.max(sd, (d.normal[1] - d.normal[0]) * 0.15) };
+  }
+  function drift() {
+    const out = []; const L = latest();
+    for (const k in IND) {
+      const b = baseline(k); if (!b || !L[k]) continue;
+      const v = +L[k].v, z = (v - b.mean) / b.sd, d = IND[k];
+      const mid = (d.normal[0] + d.normal[1]) / 2;
+      if (Math.abs(z) >= 2 && Math.abs(v - mid) > Math.abs(b.mean - mid)) {
+        out.push({ k, z, v, mean: b.mean, dir: z > 0 ? 'above' : 'below', inRange: status(k, v).level === 0 });
+      }
+    }
+    return out.sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
+  }
+  function trend(k, n) {
+    const sr = series(k).slice(-n);
+    if (sr.length < 3) return null;
+    const h = Math.ceil(sr.length / 2), avg = a => a.reduce((t, p) => t + p.v, 0) / a.length;
+    const f = avg(sr.slice(0, h)), l = avg(sr.slice(-h)), d = IND[k];
+    const dir = Math.abs(l - f) < (d.normal[1] - d.normal[0]) * 0.05 ? 'steady' : l > f ? 'rising' : 'falling';
+    return { dir, first: f, last: l, n: sr.length };
+  }
+
+  /* ---------- radiation dose ledger ----------
+     NASA-STD-3001 Vol. 1 (NASA radiation protection technical brief): career limit under 600 mSv,
+     universal for all ages and sexes; solar particle event limit 250 mSv per event. */
+  const DOSE_LIMIT = 600, SPE_LIMIT = 250;
+  function dose() { return LS.get('vo_dose', { prior: 0, log: [] }); }
+  function setPrior(v) { const d = dose(); d.prior = Math.max(0, +v || 0); LS.set('vo_dose', d); }
+  function addDose(mSv, date) {
+    const d = dose();
+    d.log = d.log.filter(x => x.date !== date).concat({ date, mSv: +mSv });
+    d.log.sort((a, b) => (a.date < b.date ? -1 : 1));
+    LS.set('vo_dose', d);
+  }
+  function doseStats() {
+    const d = dose();
+    const mission = d.log.reduce((t, x) => t + x.mSv, 0), total = d.prior + mission;
+    const recent = d.log.slice(-14);
+    const rate = recent.length ? recent.reduce((t, x) => t + x.mSv, 0) / recent.length : null;
+    const left = DOSE_LIMIT - total;
+    return { prior: d.prior, mission, total, pct: total / DOSE_LIMIT * 100, rate, left,
+      daysLeft: rate > 0 && left > 0 ? Math.floor(left / rate) : null, log: d.log };
+  }
+  // Simple summary of NASA DONKI notifications from the last 72 hours (not a forecast).
+  function swLevel(d) {
+    const since = Date.now() - 72 * 36e5;
+    const recent = a => (a || []).filter(x => new Date(x.time || x.peak).getTime() >= since);
+    if (recent(d.sep).length || recent(d.flares).some(f => /^X/i.test(f.class || ''))) return 2;
+    if (recent(d.flares).some(f => /^M/i.test(f.class || '')) || recent(d.cme).length) return 1;
+    return 0;
+  }
+
+  /* ---------- flight surgeon report (SBAR, store-and-forward) ---------- */
+  function report() {
+    const L = latest(), env = getEnv(), sc = score(), adv = advice(), dr = drift(), ds = doseStats();
+    const red = adv.filter(a => a.level === 2), amber = adv.filter(a => a.level === 1);
+    const out = [];
+    out.push('VITALORBIT FLIGHT SURGEON REPORT (SBAR)');
+    out.push('Generated: ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC');
+    out.push('Location: ' + env.name + ' (' + env.g + ')');
+    out.push('');
+    out.push('S - SITUATION');
+    out.push(red.length ? 'Out of range (act now): ' + red.map(a => IND[a.k].label + ' ' + fmt(a.k, a.v) + ' (' + a.dir + ')').join('; ')
+      : 'No readings in the act-now range.');
+    if (amber.length) out.push('Watch: ' + amber.map(a => IND[a.k].label + ' ' + fmt(a.k, a.v) + ' (' + a.dir + ')').join('; '));
+    out.push('');
+    out.push('B - BACKGROUND');
+    out.push('Health score: ' + (sc === null ? 'no data' : sc + '/100') + '. Check-in streak: ' + streak() + ' day(s). Total check-ins: ' + entries().length + '.');
+    out.push('Personal baseline: first ' + BASE_N + ' check-ins per indicator.');
+    out.push('');
+    out.push('A - ASSESSMENT (latest value, status, trend over last 7 check-ins)');
+    Object.keys(IND).forEach(k => {
+      if (!L[k]) { out.push('- ' + IND[k].label + ': no data'); return; }
+      const st = status(k, L[k].v), t = trend(k, 7);
+      out.push('- ' + IND[k].label + ': ' + fmt(k, L[k].v) + ' [' + LABELS[st.level] + ']' + (t ? ', ' + t.dir : ''));
+    });
+    if (dr.length) out.push('Drift from personal baseline: ' + dr.map(x => IND[x.k].label + ' ' + x.dir + ' baseline (' + Math.abs(x.z).toFixed(1) + ' SD)').join('; ') + '.');
+    if (ds.log.length || ds.prior) {
+      out.push('Radiation: mission dose ' + ds.mission.toFixed(1) + ' mSv; career total ' + ds.total.toFixed(1) + ' mSv = ' + ds.pct.toFixed(0) + '% of the ' + DOSE_LIMIT + ' mSv NASA career limit.');
+    }
+    const sw = LS.get('vo_sw', null);
+    if (sw) out.push('Space weather (NASA DONKI, last 72 h): ' + ['quiet', 'watch', 'elevated'][swLevel(sw)] + ' (fetched ' + String(sw.fetchedAt || '').slice(0, 16).replace('T', ' ') + ' UTC).');
+    out.push('');
+    out.push('R - RECOMMENDATION / REQUEST');
+    if (red.length || amber.length >= 3) out.push('Requesting flight surgeon review. Self-care steps in progress: ' + (adv.length ? adv.slice(0, 3).map(a => IND[a.k].label + ' - ' + a.text.replace(/\.$/, '')).join(' | ') : 'none') + '.');
+    else out.push('Routine report. No action requested.');
+    out.push('');
+    out.push('Communication: ' + env.delay + '. Send now; do not wait for a reply before taking the safe steps above.');
+    out.push('Reference ranges are common adult clinical ranges, not individual crew limits.');
+    return out.join('\n');
+  }
+
   window.VO = { IND, ORGANS, ENV, MISSIONS, LABELS, LS, status, chip, fmt, day, entries, addEntry, latest, score, scoreLevel,
-    organLevel, advice, streak, doneToday, toggleMission, stats, badges, getEnv, demo, clearAll, nav };
+    organLevel, advice, series, baseline, drift, trend, DOSE_LIMIT, SPE_LIMIT, dose, setPrior, addDose, doseStats, swLevel, report, streak, doneToday, toggleMission, stats, badges, getEnv, demo, clearAll, nav };
 })();

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="ai-generated" content="code: Claude (Anthropic), SI-assisted">
+  <meta name="generator" content="VitalOrbit, built with SI assistance (Claude, Anthropic)">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VitalOrbit · Radiation</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<header id="top"></header>
+<main>
+  <h1>Radiation and space weather</h1>
+  <p class="lead">Radiation is the one hazard astronauts cannot see or feel. Track live solar activity from NASA, and keep your dose against NASA's career limit.</p>
+
+  <section class="card" aria-labelledby="swh">
+    <div class="fhead"><h2 id="swh" style="margin:0">Space weather, last 7 days</h2><button class="ghost" id="refresh" type="button">Refresh</button></div>
+    <div id="swbody"></div>
+  </section>
+
+  <section class="card" style="margin-top:18px" aria-labelledby="dh">
+    <h2 id="dh">Your radiation dose</h2>
+    <div id="dosebody"></div>
+  </section>
+
+  <section class="card" style="margin-top:18px">
+    <h2>Reference numbers</h2>
+    <ul class="plain">
+      <li>NASA's career limit for spaceflight radiation is under <strong>600 mSv</strong>, the same for all ages and sexes. The limit for one solar particle event is <strong>250 mSv</strong>. (NASA-STD-3001, <a href="https://www.nasa.gov/wp-content/uploads/2023/03/radiation-protection-technical-brief-ochmo.pdf" target="_blank" rel="noopener">NASA technical brief</a>)</li>
+      <li>A six-month stay on the ISS exposes an astronaut to roughly <strong>50 to 120 mSv</strong>, and Earth's natural background gives about 3 mSv per year. (<a href="https://space.com/nasa-changing-astronaut-radiation-exposure-limit" target="_blank" rel="noopener">Space.com, citing the National Academies report</a>)</li>
+      <li>Neutrons make up about 30% of total radiation on the ISS. (<a href="https://www.asc-csa.gc.ca/eng/news/articles/2026/2026-02-26-monitoring-radiation-astronaut-health.asp" target="_blank" rel="noopener">CSA</a>)</li>
+    </ul>
+    <p class="muted">Space weather data comes from NASA's DONKI database through the NASA Open APIs. The summary above is a simple count of notifications from the last 72 hours, not a forecast. Your mission's radiation team decides shelter actions.</p>
+  </section>
+</main>
+
+<script src="/js/common.js"></script>
+<script>
+  VO.nav('radiation');
+  const $ = id => document.getElementById(id);
+  const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const when = t => { const d = new Date(t); return isNaN(d) ? '' : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+  const SW = [['Quiet', 0, 'No major solar activity was reported in the last 72 hours.'],
+    ['Watch', 1, 'A recent M-class flare or coronal mass ejection was reported. Check your dosimeter and review your mission radiation procedures.'],
+    ['Elevated', 2, 'A solar energetic particle event or X-class flare was reported in the last 72 hours. Follow your mission\u2019s solar particle event procedures and report to the flight surgeon.']];
+
+  function renderSW(d, note) {
+    const lv = VO.swLevel(d), order = 'ABCMX';
+    const val = f => order.indexOf((f.class || '')[0]) * 1000 + (parseFloat((f.class || '').slice(1)) || 0);
+    const top = d.flares.length ? d.flares.reduce((a, b) => (val(b) > val(a) ? b : a)).class : 'none';
+    const maxKp = d.storms.length ? Math.max(...d.storms.map(s => s.kp)) : null;
+    const ev = [].concat(
+      d.flares.map(f => ({ t: f.peak, l: 'Solar flare ' + esc(f.class) + (f.region ? ' (' + esc(f.region) + ')' : '') })),
+      d.sep.map(x => ({ t: x.time, l: 'Solar energetic particle event' })),
+      d.cme.map(c => ({ t: c.time, l: 'Coronal mass ejection' })),
+      d.storms.map(g => ({ t: g.time, l: 'Geomagnetic storm, Kp up to ' + g.kp }))
+    ).sort((a, b) => new Date(b.t) - new Date(a.t)).slice(0, 8);
+    $('swbody').innerHTML =
+      '<div class="alert' + (lv === 2 ? '' : ' watch') + '" style="' + (lv === 0 ? 'border-color:var(--s0);background:rgba(63,207,142,.1)' : '') + '" role="' + (lv === 2 ? 'alert' : 'status') + '"><strong><span class="chip s' + lv + '">' + SW[lv][0] + '</span></strong>' + SW[lv][2] + '</div>' +
+      '<div class="tiles"><div><b>' + d.flares.length + '</b><small>solar flares (largest: ' + esc(top) + ')</small></div><div><b>' + d.sep.length + '</b><small>particle events</small></div><div><b>' + d.cme.length + '</b><small>coronal mass ejections</small></div><div><b>' + (maxKp === null ? '–' : maxKp) + '</b><small>highest Kp (storms)</small></div></div>' +
+      (ev.length ? '<table><tr><th>When</th><th>Event</th></tr>' + ev.map(e => '<tr><td>' + when(e.t) + '</td><td>' + e.l + '</td></tr>').join('') + '</table>' : '<p class="muted">No events in the last 7 days.</p>') +
+      '<p class="muted" style="margin-top:10px">Source: ' + esc(d.source) + ' · fetched ' + when(d.fetchedAt) + (note ? ' · ' + note : '') + '</p>';
+  }
+
+  async function loadSW() {
+    $('swbody').innerHTML = '<p class="muted">Loading NASA data…</p>';
+    try {
+      const r = await fetch('/api/spaceweather'); const j = await r.json();
+      if (!j.ok) throw new Error(j.error);
+      VO.LS.set('vo_sw', j);
+      renderSW(j, j.stale ? 'showing the last data the server received' : '');
+    } catch (e) {
+      const c = VO.LS.get('vo_sw', null);
+      if (c) renderSW(c, 'offline, showing data saved on this device');
+      else $('swbody').innerHTML = '<p class="alert watch">Could not reach NASA space-weather data. Check the connection and press Refresh.</p>';
+    }
+  }
+
+  function renderDose() {
+    const s = VO.doseStats(), lv = s.pct >= 90 ? 2 : s.pct >= 75 ? 1 : 0;
+    const lab = ['Within limit', 'Approaching limit', 'Near or at limit'][lv];
+    const last = s.log.slice(-14), mx = Math.max(0.01, ...last.map(x => x.mSv));
+    const today = VO.day(new Date());
+    $('dosebody').innerHTML =
+      '<div class="tiles"><div><b>' + s.mission.toFixed(1) + '</b><small>mSv this mission</small></div><div><b>' + s.total.toFixed(1) + '</b><small>mSv career total</small></div><div><b>' + s.pct.toFixed(0) + '%</b><small>of the ' + VO.DOSE_LIMIT + ' mSv limit</small></div><div><b>' + (s.rate === null ? '–' : s.rate.toFixed(2)) + '</b><small>mSv/day (last 14)</small></div></div>' +
+      '<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.min(100, s.pct).toFixed(0) + '"><span style="width:' + Math.min(100, s.pct) + '%;background:var(--s' + lv + ')"></span></div>' +
+      '<p style="margin-top:10px"><span class="chip s' + lv + '">' + lab + '</span> ' + (s.left <= 0 ? 'The career limit has been reached. Contact the flight surgeon.' : s.daysLeft !== null ? 'At your recent rate, about ' + s.daysLeft + ' days of dose remain before reaching the limit.' : 'Log a few days to see a projection.') + '</p>' +
+      (last.length ? '<h3 style="margin-top:18px">Daily dose, last ' + last.length + ' entries</h3><div class="dosebars" role="img" aria-label="Bar chart of daily dose in millisieverts">' + last.map(x => '<div title="' + x.date + ': ' + x.mSv + ' mSv" style="height:' + (x.mSv / mx * 100) + '%"></div>').join('') + '</div>' : '') +
+      '<form id="doseform" style="margin-top:18px;display:flex;flex-wrap:wrap;gap:12px;align-items:end">' +
+      '<label>Date<br><input type="date" id="dd" value="' + today + '"></label>' +
+      '<label>Dose for the day (mSv)<br><input type="number" id="dm" step="0.01" min="0" placeholder="e.g. 0.45"></label>' +
+      '<button class="primary" type="submit">Save dosimeter reading</button>' +
+      '<label>Career dose before this mission (mSv)<br><input type="number" id="dp" step="0.1" min="0" value="' + s.prior + '"></label></form>' +
+      '<p class="muted" id="dmsg" role="status"></p>';
+    $('doseform').onsubmit = e => {
+      e.preventDefault();
+      const v = parseFloat($('dm').value);
+      if (isNaN(v) || v < 0) { $('dmsg').textContent = 'Enter the dose in mSv from your dosimeter.'; return; }
+      VO.addDose(v, $('dd').value || today); renderDose();
+    };
+    $('dp').onchange = () => { VO.setPrior($('dp').value); renderDose(); };
+  }
+
+  $('refresh').onclick = loadSW;
+  renderDose(); loadSW();
+</script>
+</body>
+</html>
