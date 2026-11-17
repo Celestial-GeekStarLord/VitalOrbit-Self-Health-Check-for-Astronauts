@@ -11,6 +11,7 @@
 <body>
 <header id="top"></header>
 <main>
+  <p class="eyebrow">03 · Trend analysis</p>
   <h1>Trends over time</h1>
   <p class="lead">Slow drifts matter in space. Watch which direction each indicator is heading, not just today's value.</p>
 
@@ -26,10 +27,10 @@
     <button class="primary" id="sync" type="button">Send to flight surgeon</button>
   </div>
   <div class="legend">
-    <span><i style="background:#3fcf8e"></i>In range</span>
-    <span><i style="background:#f2b84b"></i>Watch</span>
-    <span><i style="background:#ff6b6b"></i>Act now</span>
-    <span><i style="background:transparent;border:2px dashed #9cc0ff"></i>Your baseline and 2 SD</span>
+    <span><i style="background:#7ccf9b"></i>In range</span>
+    <span><i style="background:#f0a23b"></i>Watch</span>
+    <span><i style="background:#f0645a"></i>Act now</span>
+    <span><i style="background:transparent;border:2px dashed #e8b865"></i>Your baseline and 2 SD</span>
   </div>
   <canvas id="chart" role="img" aria-label="Line chart of the selected health indicator"></canvas>
   <div id="note" class="lead" style="margin-top:10px"></div>
@@ -55,7 +56,7 @@
   const cv = $('chart');
   $('ind').innerHTML = Object.keys(VO.IND).map(k => '<option value="' + k + '">' + VO.IND[k].label + '</option>').join('');
 
-  function colorFor(level) { return ['#3fcf8e', '#f2b84b', '#ff6b6b'][level] || '#6f7f9e'; }
+  function colorFor(level) { return ['#7ccf9b', '#f0a23b', '#f0645a'][level] || '#8a7d68'; }
 
   function draw() {
     const k = $('ind').value, days = +$('range').value, d = VO.IND[k];
@@ -69,7 +70,7 @@
     g.font = '13px system-ui, sans-serif';
 
     if (!pts.length) {
-      g.fillStyle = '#a3b3cf'; g.textAlign = 'center';
+      g.fillStyle = '#b9a98f'; g.textAlign = 'center';
       g.fillText('No readings in this period. Log a check-in or load demo data.', W / 2, H / 2);
       $('note').textContent = ''; return;
     }
@@ -86,17 +87,17 @@
       const top = y(Math.min(b, hi)), bot = y(Math.max(a, lo));
       if (bot > top) { g.fillStyle = col; g.fillRect(m.l, top, pw, bot - top); }
     };
-    band(lo, hi, 'rgba(255,107,107,.18)');
-    band(d.caution[0], d.caution[1], 'rgba(242,184,75,.2)');
-    band(d.normal[0], d.normal[1], 'rgba(63,207,142,.25)');
+    band(lo, hi, 'rgba(240,100,90,.18)');
+    band(d.caution[0], d.caution[1], 'rgba(240,162,59,.2)');
+    band(d.normal[0], d.normal[1], 'rgba(124,207,155,.22)');
     const bl = VO.baseline(k);
     if (bl) {
-      g.setLineDash([6, 5]); g.strokeStyle = 'rgba(156,192,255,.85)'; g.lineWidth = 1.5;
+      g.setLineDash([6, 5]); g.strokeStyle = 'rgba(232,184,101,.9)'; g.lineWidth = 1.5;
       [bl.mean, bl.mean + 2 * bl.sd, bl.mean - 2 * bl.sd].forEach(v => { if (v > lo && v < hi) { g.beginPath(); g.moveTo(m.l, y(v)); g.lineTo(W - m.r, y(v)); g.stroke(); } });
       g.setLineDash([]);
     }
 
-    g.fillStyle = '#a3b3cf'; g.strokeStyle = 'rgba(255,255,255,.08)'; g.textAlign = 'right';
+    g.fillStyle = '#b9a98f'; g.strokeStyle = 'rgba(255,255,255,.08)'; g.textAlign = 'right';
     for (let i = 0; i <= 4; i++) {
       const v = lo + (hi - lo) * i / 4, yy = y(v);
       g.beginPath(); g.moveTo(m.l, yy); g.lineTo(W - m.r, yy); g.stroke();
@@ -105,12 +106,12 @@
     g.textAlign = 'left'; g.fillText(new Date(tmin).toLocaleDateString(), m.l, H - 8);
     g.textAlign = 'right'; g.fillText(new Date(tmax).toLocaleDateString(), W - m.r, H - 8);
 
-    g.strokeStyle = '#9cc0ff'; g.lineWidth = 2; g.beginPath();
+    g.strokeStyle = '#e8b865'; g.lineWidth = 2; g.beginPath();
     pts.forEach((p, i) => { i ? g.lineTo(x(p.t), y(p.v)) : g.moveTo(x(p.t), y(p.v)); });
     g.stroke();
     pts.forEach(p => {
       g.fillStyle = colorFor(VO.status(k, p.v).level);
-      g.strokeStyle = '#0d1626'; g.lineWidth = 2;
+      g.strokeStyle = '#16120e'; g.lineWidth = 2;
       g.beginPath(); g.arc(x(p.t), y(p.v), 5, 0, 7); g.fill(); g.stroke();
     });
 

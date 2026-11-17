@@ -11,6 +11,7 @@
 <body>
 <header id="top"></header>
 <main>
+  <p class="eyebrow">04 · Radiation environment</p>
   <h1>Radiation and space weather</h1>
   <p class="lead">Radiation is the one hazard astronauts cannot see or feel. Track live solar activity from NASA, and keep your dose against NASA's career limit.</p>
 
@@ -57,7 +58,7 @@
       d.storms.map(g => ({ t: g.time, l: 'Geomagnetic storm, Kp up to ' + g.kp }))
     ).sort((a, b) => new Date(b.t) - new Date(a.t)).slice(0, 8);
     $('swbody').innerHTML =
-      '<div class="alert' + (lv === 2 ? '' : ' watch') + '" style="' + (lv === 0 ? 'border-color:var(--s0);background:rgba(63,207,142,.1)' : '') + '" role="' + (lv === 2 ? 'alert' : 'status') + '"><strong><span class="chip s' + lv + '">' + SW[lv][0] + '</span></strong>' + SW[lv][2] + '</div>' +
+      '<div class="alert' + (lv === 2 ? '' : ' watch') + '" style="' + (lv === 0 ? 'border-color:var(--s0);background:rgba(124,207,155,.1)' : '') + '" role="' + (lv === 2 ? 'alert' : 'status') + '"><strong><span class="chip s' + lv + '">' + SW[lv][0] + '</span></strong>' + SW[lv][2] + '</div>' +
       '<div class="tiles"><div><b>' + d.flares.length + '</b><small>solar flares (largest: ' + esc(top) + ')</small></div><div><b>' + d.sep.length + '</b><small>particle events</small></div><div><b>' + d.cme.length + '</b><small>coronal mass ejections</small></div><div><b>' + (maxKp === null ? '–' : maxKp) + '</b><small>highest Kp (storms)</small></div></div>' +
       (ev.length ? '<table><tr><th>When</th><th>Event</th></tr>' + ev.map(e => '<tr><td>' + when(e.t) + '</td><td>' + e.l + '</td></tr>').join('') + '</table>' : '<p class="muted">No events in the last 7 days.</p>') +
       '<p class="muted" style="margin-top:10px">Source: ' + esc(d.source) + ' · fetched ' + when(d.fetchedAt) + (note ? ' · ' + note : '') + '</p>';

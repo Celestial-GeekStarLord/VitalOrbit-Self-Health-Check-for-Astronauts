@@ -269,8 +269,11 @@
       '<a class="brand" href="/">VitalOrbit</a>' +
       '<nav aria-label="Main">' + pages.map(p =>
         '<a href="' + p[2] + '"' + (p[0] === active ? ' aria-current="page"' : '') + '>' + p[1] + '</a>').join('') + '</nav>' +
+      '<span class="utc" id="utc" role="timer" aria-label="Current UTC time"></span>' +
       '<label class="env">Location <select id="envSel">' + ENV.map(e =>
         '<option value="' + e.id + '"' + (e.id === env.id ? ' selected' : '') + '>' + e.name + '</option>').join('') + '</select></label>';
+    const tick = () => { const n = new Date(); document.getElementById('utc').textContent = 'UTC ' + n.toISOString().slice(11, 19); };
+    tick(); setInterval(tick, 1000);
     document.getElementById('envSel').onchange = function () { LS.set('vo_env', this.value); location.reload(); };
   }
 
