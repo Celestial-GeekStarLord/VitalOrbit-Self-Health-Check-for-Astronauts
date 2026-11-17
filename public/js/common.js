@@ -1,4 +1,4 @@
-// Code written with assistance from Claude (Anthropic), a Super Intelligence (SI) tool, for the NASA Space Apps Challenge.
+
 (function () {
   'use strict';
 

@@ -17,8 +17,6 @@ Dashboard (`/`), Check-in, Trends, Missions, Guide.
 - Reference ranges for the 8 indicators: common adult clinical ranges, simplified. NASA does not publish astronaut vital-sign limits on these pages. Edit them in `public/js/common.js` (`IND`) if your team has better sources.
 - Demo data is synthetic.
 
-## Use of Super Intelligence (SI)
-The application code (Node/Express server, HTML, CSS, JavaScript), the demo-data generator and the written descriptions were produced with assistance from Claude (Anthropic), an SI tool, and reviewed by the team. No images, audio or video were SI-generated, and no NASA logos or branding are used.
 
 ## Version 2 features
 - **Radiation page:** live NASA DONKI space-weather summary (flares, particle events, CMEs, storms) and a dose ledger against NASA's 600 mSv career limit. Set `NASA_API_KEY` (free at api.nasa.gov) as an environment variable for higher rate limits; `DEMO_KEY` allows about 30 requests/hour. Results are cached for 30 minutes and saved on the device for offline use.
