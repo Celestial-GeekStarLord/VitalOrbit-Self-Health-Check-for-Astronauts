@@ -65,16 +65,19 @@
 
   async function loadSW() {
     $('swbody').innerHTML = '<p class="muted">Loading NASA data…</p>';
+    let why = '';
     try {
-      const r = await fetch('/api/spaceweather'); const j = await r.json();
-      if (!j.ok) throw new Error(j.error);
+      const r = await fetch('/api/spaceweather');
+      let j;
+      try { j = await r.json(); } catch (e) { throw new Error('The server route /api/spaceweather was not found (HTTP ' + r.status + '). Redeploy the latest server.js.'); }
+      if (!j.ok) throw new Error((j.error || 'HTTP ' + r.status) + (j.hint ? '. ' + j.hint : ''));
       VO.LS.set('vo_sw', j);
-      renderSW(j, j.stale ? 'showing the last data the server received' : '');
-    } catch (e) {
-      const c = VO.LS.get('vo_sw', null);
-      if (c) renderSW(c, 'offline, showing data saved on this device');
-      else $('swbody').innerHTML = '<p class="alert watch">Could not reach NASA space-weather data. Check the connection and press Refresh.</p>';
-    }
+      renderSW(j, (j.stale ? 'showing the last data the server received' : '') + (j.missing && j.missing.length ? (j.stale ? ' · ' : '') + 'some NASA feeds were unavailable (' + j.missing.join(', ') + '), so this summary may be incomplete' : ''));
+      return;
+    } catch (e) { why = e.message || 'network error'; }
+    const c = VO.LS.get('vo_sw', null);
+    if (c) renderSW(c, 'offline, showing data saved on this device (' + esc(why) + ')');
+    else $('swbody').innerHTML = '<p class="alert watch"><strong>Could not load NASA space-weather data.</strong>' + esc(why) + '</p>';
   }
 
   function renderDose() {

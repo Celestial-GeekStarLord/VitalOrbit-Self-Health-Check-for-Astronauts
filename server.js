@@ -52,24 +52,32 @@ async function donki(type, start, end) {
 
 app.get('/api/spaceweather', async (req, res) => {
   if (swCache.data && Date.now() - swCache.t < 30 * 60 * 1000) return res.json(swCache.data);
-  try {
-    const iso = d => d.toISOString().slice(0, 10);
-    const end = new Date(), start = new Date(Date.now() - 7 * 864e5);
-    const [flr, sep, cme, gst] = await Promise.all(['FLR', 'SEP', 'CME', 'GST'].map(t => donki(t, iso(start), iso(end))));
-    const data = {
-      ok: true, fetchedAt: new Date().toISOString(), source: 'NASA DONKI (api.nasa.gov)',
-      flares: flr.map(f => ({ class: f.classType, peak: f.peakTime || f.beginTime, region: f.sourceLocation || null })),
-      sep: sep.map(x => ({ time: x.eventTime })),
-      cme: cme.map(c => ({ time: c.startTime, region: c.sourceLocation || null })),
-      storms: gst.map(g => ({ time: g.startTime, kp: Math.max(0, ...((g.allKpIndex || []).map(k => k.kpIndex || 0))) }))
-    };
-    swCache = { t: Date.now(), data };
-    res.json(data);
-  } catch (err) {
-    console.error(err);
+  const iso = d => d.toISOString().slice(0, 10);
+  const end = new Date(), start = new Date(Date.now() - 7 * 864e5);
+  const types = ['FLR', 'SEP', 'CME', 'GST'];
+  // allSettled: one failing NASA feed should not hide the others.
+  const results = await Promise.allSettled(types.map(t => donki(t, iso(start), iso(end))));
+  const got = {}, missing = [], reasons = [];
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') got[types[i]] = r.value;
+    else { got[types[i]] = []; missing.push(types[i]); reasons.push(r.reason && r.reason.message ? r.reason.message : String(r.reason)); }
+  });
+  if (missing.length === types.length) {
+    console.error('DONKI failed:', reasons);
+    const rate = reasons.some(m => / 429/.test(m));
     if (swCache.data) return res.json({ ...swCache.data, stale: true });
-    res.status(502).json({ ok: false, error: 'NASA space-weather service unavailable' });
+    return res.status(502).json({ ok: false, error: 'NASA DONKI request failed (' + reasons[0] + ')',
+      hint: rate ? 'NASA rate limit reached. Add a free NASA_API_KEY (api.nasa.gov) in the server environment.' : 'Check that the server can reach api.nasa.gov.' });
   }
+  const data = {
+    ok: true, fetchedAt: new Date().toISOString(), source: 'NASA DONKI (api.nasa.gov)', missing,
+    flares: got.FLR.map(f => ({ class: f.classType, peak: f.peakTime || f.beginTime, region: f.sourceLocation || null })),
+    sep: got.SEP.map(x => ({ time: x.eventTime })),
+    cme: got.CME.map(c => ({ time: c.startTime, region: c.sourceLocation || null })),
+    storms: got.GST.map(g => ({ time: g.startTime, kp: Math.max(0, ...((g.allKpIndex || []).map(k => k.kpIndex || 0))) }))
+  };
+  if (!missing.length) swCache = { t: Date.now(), data };
+  res.json(data);
 });
 
 // Locally: run a server. On Vercel: export the app (public/ is served by Vercel's CDN).
