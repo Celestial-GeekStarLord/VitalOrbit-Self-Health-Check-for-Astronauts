@@ -13,7 +13,7 @@
 
   /* ---------- health indicators ----------
      normal  = green range, caution = amber range, anything outside = red.
-     General adult reference ranges for demonstration only, not medical advice. */
+      */
   const IND = {
     hr: {
       label: 'Resting heart rate', unit: 'bpm', min: 20, max: 220, step: 1, ph: 64,
